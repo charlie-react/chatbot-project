@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-900 text-white h-screen flex flex-col">
+{% csrf_token %}
+
+
+    <header class="bg-gray-800 p-4 shadow-md">
+        <h1 class="text-xl font-semibold">AI Chat Assistant</h1>
+    </header>
+
+
+    <div id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-4">
+
+
+<!--        <div class="flex">-->
+<!--            <div class="bg-gray-700 p-3 rounded-2xl max-w-lg">-->
+<!--                Hello 👋 How can I help you today?-->
+<!--            </div>-->
+<!--        </div>-->
+        {% for msg in messages %}
+        {% if msg.is_bot %}
+         <div class="flex">
+            <div class="bg-gray-700 p-3 rounded-2xl max-w-lg">
+               {{msg.content}}
+            </div>
+        </div>
+        {% else %}
+        <div class="flex justify-end">
+                    <div class="bg-blue-600 p-3 rounded-2xl max-w-lg">
+                        {{msg.content}}
+                    </div>
+                </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+
+    <div class="bg-gray-800 p-4">
+        <div class="flex space-x-3">
+            <input
+                id="message-input"
+                type="text"
+                name="message"
+                placeholder="Type your message..."
+                class="flex-1 p-3 rounded-xl bg-gray-700 text-white focus:outline-none"
+            >
+            <button
+                onclick="sendMessage()"
+                class="bg-blue-600 px-5 py-3 rounded-xl hover:bg-blue-700 transition"
+            >
+                Send
+            </button>
+        </div>
+    </div>
+
+<script>
+const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+const socket = new WebSocket(`${scheme}://${window.location.host}/ws/chat/`);
+
+let currentBotDiv = null;
+
+socket.onopen = () => console.log("socket open ✅");
+
+socket.onmessage = (e) => {
+  const data = JSON.parse(e.data);
+  const chat = document.getElementById("chat-container");
+
+  if (data.type === "start") {
+    // create empty bot bubble
+    const wrapper = document.createElement("div");
+    wrapper.className = "flex";
+
+    wrapper.innerHTML = `
+      <div class="bg-gray-700 p-3 rounded-2xl max-w-lg"></div>
+    `;
+
+    chat.appendChild(wrapper);
+    currentBotDiv = wrapper.querySelector("div");
+  }
+
+  if (data.type === "delta" && currentBotDiv) {
+    currentBotDiv.textContent += data.text;
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  if (data.type === "done") {
+    currentBotDiv = null;
+  }
+
+  if (data.type === "error") {
+    alert(data.text);
+    currentBotDiv = null;
+  }
+};
+
+socket.onerror = (e) => console.log("WebSocket error", e);
+socket.onclose = () => console.log("WebSocket closed");
+
+function sendMessage() {
+  const input = document.getElementById("message-input");
+  const message = input.value.trim();
+  if (!message) return;
+
+  const chat = document.getElementById("chat-container");
+
+  // show user bubble immediately
+  chat.insertAdjacentHTML("beforeend", `
+    <div class="flex justify-end">
+      <div class="bg-blue-600 p-3 rounded-2xl max-w-lg">${message}</div>
+    </div>
+  `);
+
+  socket.send(JSON.stringify({ message }));
+  input.value = "";
+  chat.scrollTop = chat.scrollHeight;
+}
+</script>
+
+<!--    <script>-->
+<!--        function sendMessage() {-->
+<!--            const input = document.getElementById("message-input");-->
+<!--            const message = input.value.trim();-->
+<!--            if (!message) return;-->
+
+<!--            const chatContainer = document.getElementById("chat-container");-->
+
+<!--            // Add user message-->
+<!--            chatContainer.innerHTML += `-->
+<!--                <div class="flex justify-end">-->
+<!--                    <div class="bg-blue-600 p-3 rounded-2xl max-w-lg">-->
+<!--                        ${message}-->
+<!--                    </div>-->
+<!--                </div>-->
+<!--            `;-->
+
+<!--            // Clear input-->
+<!--            input.value = "";-->
+
+<!--            // Send to Django backend-->
+<!--            fetch("", {-->
+<!--                method: "POST",-->
+<!--                headers: {-->
+<!--                    "Content-Type": "application/x-www-form-urlencoded",-->
+<!--                    "X-CSRFToken": "{{ csrf_token }}"-->
+<!--                },-->
+<!--                body: "message=" + encodeURIComponent(message)-->
+<!--            })-->
+<!--            .then(response => response.json())-->
+<!--            .then(data => {-->
+<!--                chatContainer.innerHTML += `-->
+<!--                    <div class="flex">-->
+<!--                        <div class="bg-gray-700 p-3 rounded-2xl max-w-lg">-->
+<!--                            ${data.response}-->
+<!--                        </div>-->
+<!--                    </div>-->
+<!--                `;-->
+<!--                chatContainer.scrollTop = chatContainer.scrollHeight;-->
+<!--            });-->
+<!--        }-->
+<!--    </script>-->
+
+</body>
+</html>
