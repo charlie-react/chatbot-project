@@ -1,26 +1,54 @@
 import json
 import os
-from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.generic.websocket import WebsocketConsumer
 from openai import OpenAI, RateLimitError
+from .models import Conversation, Message
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-class ChatConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
+def make_title(text: str) -> str:
+    words = (text or "").strip().split()
+    if not words:
+        return "New Chat"
+    return " ".join(words[:8])[:120]
+
+class ChatConsumer(WebsocketConsumer):
+    def connect(self):
         user = self.scope["user"]
         if user.is_anonymous:
-            await self.close()
+            self.close()
             return
-        await self.accept()
+        self.accept()
 
-    async def receive(self, text_data):
+    def receive(self, text_data):
+        user = self.scope["user"]
         data = json.loads(text_data)
+
         user_message = (data.get("message") or "").strip()
-        if not user_message:
+        conversation_id = data.get("conversation_id")
+
+        if not user_message or not conversation_id:
             return
 
-        # tell frontend: start a new bot bubble
-        await self.send(text_data=json.dumps({"type": "start"}))
+        try:
+            conversation = Conversation.objects.get(id=conversation_id, user=user)
+        except Conversation.DoesNotExist:
+            self.send(text_data=json.dumps({"type": "error", "text": "Conversation not found"}))
+            return
+
+        # Auto-title if default
+        if conversation.title.strip().lower() in ("new chat", ""):
+            conversation.title = make_title(user_message)
+            conversation.save()
+            self.send(text_data=json.dumps({"type": "title", "text": conversation.title}))
+
+        # Save user message
+        Message.objects.create(conversation=conversation, content=user_message, is_bot=False)
+
+        # Tell frontend to create empty bot bubble
+        self.send(text_data=json.dumps({"type": "start"}))
+
+        bot_text = ""
 
         try:
             with client.responses.stream(
@@ -30,20 +58,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
             ) as stream:
                 for event in stream:
                     if event.type == "response.output_text.delta":
-                        await self.send(text_data=json.dumps({
-                            "type": "delta",
-                            "text": event.delta
-                        }))
+                        chunk = event.delta
+                        bot_text += chunk
+                        self.send(text_data=json.dumps({"type": "delta", "text": chunk}))
 
-            await self.send(text_data=json.dumps({"type": "done"}))
+            # Save bot message once
+            Message.objects.create(conversation=conversation, content=bot_text, is_bot=True)
+            self.send(text_data=json.dumps({"type": "done"}))
 
         except RateLimitError:
-            await self.send(text_data=json.dumps({
-                "type": "error",
-                "text": "⚠️ API quota exceeded."
-            }))
+            self.send(text_data=json.dumps({"type": "error", "text": "⚠️ API quota exceeded."}))
         except Exception as e:
-            await self.send(text_data=json.dumps({
-                "type": "error",
-                "text": f"Internal error: {str(e)}"
-            }))
+            self.send(text_data=json.dumps({"type": "error", "text": f"Internal error: {str(e)}"}))

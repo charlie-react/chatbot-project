@@ -6,23 +6,55 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
-<body class="bg-gray-900 text-white h-screen flex flex-col">
+<body class="bg-gray-900 text-white h-screen flex">
 {% csrf_token %}
 
 
-    <header class="bg-gray-800 p-4 shadow-md">
-        <h1 class="text-xl font-semibold">AI Chat Assistant</h1>
+<aside class="w-72 bg-gray-800 border-r border-gray-700 flex flex-col">
+    <div class="p-4 flex items-center justify-between">
+      <h2 class="font-semibold">Chats</h2>
+      <a href="{% url 'chat:new' %}"
+         class="text-sm bg-blue-600 px-3 py-2 rounded-lg hover:bg-blue-700">
+        + New
+      </a>
+    </div>
+
+    <div class="px-4 pb-2 text-xs text-gray-400">
+      Logged in as <span class="text-gray-200">{{ request.user.username }}</span>
+    </div>
+
+
+    <nav class="flex-1 overflow-y-auto px-2 space-y-1">
+      {% for c in conversations %}
+        <a href="{% url 'chat:detail' c.id %}"
+           class="block px-3 py-2 rounded-lg hover:bg-gray-700
+                  {% if c.id == conversation.id %} bg-gray-700 {% endif %}">
+          <div class="text-sm font-medium truncate">{{ c.title }}</div>
+          <div class="text-xs text-gray-400">
+            {{ c.updated_at|date:"M d, H:i" }}
+          </div>
+        </a>
+      {% empty %}
+        <p class="text-gray-400 text-sm px-3 py-2">No conversations yet.</p>
+      {% endfor %}
+    </nav>
+
+
+   <form method="post" action="{% url 'chat:logout' %}">
+  {% csrf_token %}
+  <button type="submit"
+          class="w-full text-center bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg">
+    Logout
+  </button>
+</form>
+  </aside>
+
+<main class="flex-1 flex flex-col">
+    <header class="bg-gray-800 p-4 border-b border-gray-700">
+      <h1 class="text-lg font-semibold truncate">{{ conversation.title }}</h1>
     </header>
-
-
     <div id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-4">
 
-
-<!--        <div class="flex">-->
-<!--            <div class="bg-gray-700 p-3 rounded-2xl max-w-lg">-->
-<!--                Hello 👋 How can I help you today?-->
-<!--            </div>-->
-<!--        </div>-->
         {% for msg in messages %}
         {% if msg.is_bot %}
          <div class="flex">
@@ -58,7 +90,7 @@
             </button>
         </div>
     </div>
-
+ </main>
 <script>
 const scheme = window.location.protocol === "https:" ? "wss" : "ws";
 const socket = new WebSocket(`${scheme}://${window.location.host}/ws/chat/`);
@@ -70,6 +102,10 @@ socket.onopen = () => console.log("socket open ✅");
 socket.onmessage = (e) => {
   const data = JSON.parse(e.data);
   const chat = document.getElementById("chat-container");
+
+  if (data.type === "title") {
+  document.querySelector("header h1").textContent = data.text;
+}
 
   if (data.type === "start") {
     // create empty bot bubble
@@ -116,7 +152,10 @@ function sendMessage() {
     </div>
   `);
 
-  socket.send(JSON.stringify({ message }));
+  socket.send(JSON.stringify({
+  message,
+  conversation_id: {{ conversation.id }}
+}));
   input.value = "";
   chat.scrollTop = chat.scrollHeight;
 }
