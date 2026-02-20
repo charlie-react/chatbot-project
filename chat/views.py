@@ -1,11 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from openai import OpenAI,RateLimitError
 import os
-
 from .forms import RegisterForm
 from dotenv import load_dotenv
 from django.contrib.auth import login,authenticate
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from .models import Conversation,Message
 load_dotenv()
 
@@ -43,6 +43,23 @@ def chat_detail(request,conversation_id):
     messages = Message.objects.filter(conversation=conversation).order_by("created_at", "id")
 
     return render(request,"chat/index.html",{"conversation":conversation,"conversations":conversations,"messages":messages})
+
+@login_required
+@require_POST
+def conversation_rename(request, conversation_id):
+    convo = get_object_or_404(Conversation, id=conversation_id, user=request.user)
+    title = (request.POST.get("title") or "").strip()
+    if title:
+        convo.title = title[:120]
+        convo.save(update_fields=["title"])
+    return redirect("chat:detail", conversation_id=convo.id)
+
+@login_required
+@require_POST
+def conversation_delete(request, conversation_id):
+    convo = get_object_or_404(Conversation, id=conversation_id, user=request.user)
+    convo.delete()
+    return redirect("chat:home")
 
 # def index(request):
 #     conversation, created = Conversation.objects.get_or_create(user=request.user)

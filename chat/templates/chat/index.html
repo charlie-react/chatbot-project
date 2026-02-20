@@ -7,7 +7,6 @@
 </head>
 
 <body class="bg-gray-900 text-white h-screen flex">
-{% csrf_token %}
 
 
 <aside class="w-72 bg-gray-800 border-r border-gray-700 flex flex-col">
@@ -23,21 +22,76 @@
       Logged in as <span class="text-gray-200">{{ request.user.username }}</span>
     </div>
 
+<nav class="flex-1 overflow-y-auto px-2 space-y-1">
+  {% for c in conversations %}
+    <div
+      class="relative flex items-center justify-between rounded-lg hover:bg-gray-700
+             {% if conversation and c.id == conversation.id %} bg-gray-700 {% endif %} px-3 py-2"
+      data-convo-row
+      data-convo-id="{{ c.id }}"
+      data-convo-title="{{ c.title|escapejs }}"
+    >
+      <!-- Link area -->
+      <a href="{% url 'chat:detail' c.id %}" class="min-w-0 flex-1">
+        <div class="text-sm font-medium truncate">{{ c.title }}</div>
+        <div class="text-xs text-gray-400">{{ c.updated_at|date:"M d, H:i" }}</div>
+      </a>
 
-    <nav class="flex-1 overflow-y-auto px-2 space-y-1">
-      {% for c in conversations %}
-        <a href="{% url 'chat:detail' c.id %}"
-           class="block px-3 py-2 rounded-lg hover:bg-gray-700
-                  {% if c.id == conversation.id %} bg-gray-700 {% endif %}">
-          <div class="text-sm font-medium truncate">{{ c.title }}</div>
-          <div class="text-xs text-gray-400">
-            {{ c.updated_at|date:"M d, H:i" }}
-          </div>
-        </a>
-      {% empty %}
-        <p class="text-gray-400 text-sm px-3 py-2">No conversations yet.</p>
-      {% endfor %}
-    </nav>
+      <!-- 3-dots button -->
+      <button
+        type="button"
+        class="ml-2 px-2 py-1 rounded-md text-gray-300 hover:text-white hover:bg-gray-600"
+        aria-label="Conversation options"
+        data-menu-button
+      >
+        ⋯
+      </button>
+
+      <!-- Dropdown menu -->
+      <div
+        class="hidden absolute right-2 top-11 z-20 w-40 rounded-lg border border-gray-700 bg-gray-900 shadow-lg overflow-hidden"
+        data-menu
+      >
+        <button
+          type="button"
+          class="w-full text-left px-3 py-2 text-sm hover:bg-gray-800"
+          data-action="rename"
+        >
+          Edit title
+        </button>
+        <button
+          type="button"
+          class="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-gray-800"
+          data-action="delete"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-gray-400 text-sm px-3 py-2">No conversations yet.</p>
+  {% endfor %}
+</nav>
+<!--    <nav class="flex-1 overflow-y-auto px-2 space-y-1">-->
+<!--      {% for c in conversations %}-->
+<!--        <a href="{% url 'chat:detail' c.id %}"-->
+<!--           class="flex items-center justify-between rounded-lg hover:bg-gray-700-->
+<!--                  {% if c.id == conversation.id %} bg-gray-700 {% endif %} px-3 py-2 ">-->
+<!--         <div  class="block ">-->
+<!--              <div class="text-sm font-medium truncate">{{ c.title }}</div>-->
+<!--          <div class="text-xs text-gray-400">-->
+<!--            {{ c.updated_at|date:"M d, H:i" }}-->
+<!--          </div>-->
+<!--         </div>-->
+<!--            <button>-->
+<!--                ...-->
+<!--            </button>-->
+
+<!--        </a>-->
+<!--      {% empty %}-->
+<!--        <p class="text-gray-400 text-sm px-3 py-2">No conversations yet.</p>-->
+<!--      {% endfor %}-->
+<!--    </nav>-->
 
 
    <form method="post" action="{% url 'chat:logout' %}">
@@ -91,6 +145,177 @@
         </div>
     </div>
  </main>
+<!-- Rename Modal -->
+<div id="rename-modal" class="hidden fixed inset-0 z-50">
+  <div class="absolute inset-0 bg-black/60" data-close></div>
+
+  <div class="relative mx-auto mt-28 w-[92%] max-w-md rounded-2xl bg-gray-900 border border-gray-700 shadow-xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold">Edit title</h3>
+      <button type="button" class="text-gray-400 hover:text-white" data-close aria-label="Close">✕</button>
+    </div>
+
+    <form id="rename-form" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="conversation_id" id="rename-convo-id">
+
+      <label class="block text-sm text-gray-300 mb-2">Title</label>
+      <input
+        id="rename-input"
+        name="title"
+        maxlength="120"
+        class="w-full p-3 rounded-xl bg-gray-800 text-white placeholder-gray-400 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
+        placeholder="Conversation title"
+      >
+
+      <div class="mt-5 flex justify-end gap-2">
+        <button type="button" class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600" data-close>
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700">
+          Save
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div id="delete-modal" class="hidden fixed inset-0 z-50">
+  <div class="absolute inset-0 bg-black/60" data-close></div>
+
+  <div class="relative mx-auto mt-28 w-[92%] max-w-md rounded-2xl bg-gray-900 border border-gray-700 shadow-xl p-5">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="text-lg font-semibold text-red-200">Delete conversation?</h3>
+      <button type="button" class="text-gray-400 hover:text-white" data-close aria-label="Close">✕</button>
+    </div>
+
+    <p class="text-sm text-gray-300 mb-5">
+      This will permanently delete the conversation and all its messages. This action cannot be undone.
+    </p>
+
+    <form id="delete-form" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="conversation_id" id="delete-convo-id">
+      <div class="flex justify-end gap-2">
+        <button type="button" class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600" data-close>
+          Cancel
+        </button>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700">
+          Delete
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+  // ===== Helpers =====
+  const qs = (sel, root=document) => root.querySelector(sel);
+  const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  // Close all open dropdown menus
+  function closeAllMenus() {
+    qsa("[data-menu]").forEach(m => m.classList.add("hidden"));
+  }
+
+  // ===== Dropdown menu behavior =====
+  document.addEventListener("click", (e) => {
+    const menuButton = e.target.closest("[data-menu-button]");
+    const menu = e.target.closest("[data-menu]");
+    const row = e.target.closest("[data-convo-row]");
+
+    // Clicked a 3-dots button
+    if (menuButton && row) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const thisMenu = qs("[data-menu]", row);
+      const isOpen = !thisMenu.classList.contains("hidden");
+
+      closeAllMenus();
+      if (!isOpen) thisMenu.classList.remove("hidden");
+      return;
+    }
+
+    // Click inside a menu -> don't auto-close yet (actions will handle)
+    if (menu) return;
+
+    // Otherwise, click outside -> close
+    closeAllMenus();
+
+    console.log("clicked", e.target);
+  });
+
+
+  // ===== Modals =====
+  function openModal(modalEl) {
+    modalEl.classList.remove("hidden");
+  }
+  function closeModal(modalEl) {
+    modalEl.classList.add("hidden");
+  }
+
+  const renameModal = qs("#rename-modal");
+  const deleteModal = qs("#delete-modal");
+
+  // Close modals on overlay/close button
+  [renameModal, deleteModal].forEach(modal => {
+    qsa("[data-close]", modal).forEach(el => {
+      el.addEventListener("click", () => closeModal(modal));
+    });
+  });
+
+  // Escape key closes modals + menus
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeAllMenus();
+      closeModal(renameModal);
+      closeModal(deleteModal);
+    }
+  });
+
+  // ===== Action handling =====
+  document.addEventListener("click", (e) => {
+    const actionBtn = e.target.closest("[data-action]");
+    if (!actionBtn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const action = actionBtn.getAttribute("data-action");
+    const row = e.target.closest("[data-convo-row]");
+    if (!row) return;
+
+    const convoId = row.getAttribute("data-convo-id");
+    const convoTitle = row.getAttribute("data-convo-title") || "";
+
+    closeAllMenus();
+
+    if (action === "rename") {
+      // Set form action to your backend rename endpoint
+      const renameForm = qs("#rename-form");
+      // Change this URL name if yours differs:
+      renameForm.action = "{% url 'chat:rename' 0 %}".replace("/0/", `/${convoId}/`);
+
+      qs("#rename-convo-id").value = convoId;
+      qs("#rename-input").value = convoTitle;
+      openModal(renameModal);
+
+      // focus input (after paint)
+      setTimeout(() => qs("#rename-input").focus(), 0);
+    }
+
+    if (action === "delete") {
+      const deleteForm = qs("#delete-form");
+      // Change this URL name if yours differs:
+      deleteForm.action = "{% url 'chat:delete' 0 %}".replace("/0/", `/${convoId}/`);
+
+      qs("#delete-convo-id").value = convoId;
+      openModal(deleteModal);
+    }
+  });
+</script>
+
 <script>
 const scheme = window.location.protocol === "https:" ? "wss" : "ws";
 const socket = new WebSocket(`${scheme}://${window.location.host}/ws/chat/`);
